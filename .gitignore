@@ -1,0 +1,63 @@
+# Root .gitignore for QCM-Net
+
+# Node
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+package-lock.json
+.pnpm-debug.log
+
+# Build outputs
+/frontend/build/
+/frontend/dist/
+/frontend/.env.local
+
+# Laravel / PHP
+/backend/vendor/
+/backend/.env
+/backend/.env.*.local
+/backend/.phpunit.result.cache
+/backend/.idea/
+
+# Laravel storage and cache (subfolders already have their own .gitignore but keep here too)
+/backend/storage/
+/backend/bootstrap/cache/
+/backend/.vscode/
+
+# Composer
+composer.phar
+composer.lock
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# IDEs
+.vscode/
+.idea/
+*.sublime-project
+*.sublime-workspace
+
+# Logs
+*.log
+/backend/storage/logs/
+
+# Sentry / coverage / test
+coverage/
+phpunit.xml
+
+# Keys and secrets
+*.pem
+*.key
+
+# Misc
+*.swp
+*.tmp
+
+# Ignore build outputs from frontend production
+/frontend/build/
+/frontend/.cache/
+
+# Keep node_modules and vendor local to subfolders if needed
+
