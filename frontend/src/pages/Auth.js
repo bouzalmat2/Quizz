@@ -55,9 +55,10 @@ export default function Auth() {
       .then((response) => {
         const userData = response?.data;
         if (!userData) throw new Error('Invalid server response');
-        // store token and role
-        try { localStorage.setItem('qcm_user_token', userData.api_token); } catch (err) {}
-        try { localStorage.setItem('qcm_user_role', userData.role); } catch (err) {}
+  // store token, role and user id
+  try { localStorage.setItem('qcm_user_token', userData.api_token); } catch (err) {}
+  try { localStorage.setItem('qcm_user_role', userData.role); } catch (err) {}
+  try { localStorage.setItem('qcm_user_id', userData.id); } catch (err) {}
         setIsLoading(false);
         // redirect
         if (userData.role === 'teacher') {

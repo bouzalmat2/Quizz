@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 
 const TeacherDashboard = ({ user, onLogout }) => {
@@ -6,6 +6,17 @@ const TeacherDashboard = ({ user, onLogout }) => {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
   const navigate = useNavigate();
+
+  const [profile, setProfile] = useState(null);
+  const token = localStorage.getItem('qcm_user_token');
+
+  useEffect(() => {
+    if (!token) return;
+    fetch('/api/profile', { headers: { Authorization: token ? `Bearer ${token}` : '' } })
+      .then(r => r.json())
+      .then(d => setProfile(d?.data || null))
+      .catch(() => setProfile(null));
+  }, [token]);
 
   const handleLogout = () => {
     try { localStorage.removeItem('qcm_user_token'); } catch (e) {}
@@ -48,11 +59,15 @@ const TeacherDashboard = ({ user, onLogout }) => {
       <div className={`sidebar ${mobileMenuOpen ? 'mobile-open' : ''}`}>
         <div className="sidebar-header">
           <a href="/" className="sidebar-logo">QCM-Net</a>
-          <div className="user-info">
-            <div className="user-avatar">TD</div>
+          <div className="user-info" onClick={() => navigate('/profile')} style={{ cursor: 'pointer' }}>
+            {profile?.avatar ? (
+              <img src={profile.avatar} alt="avatar" className="user-avatar" />
+            ) : (
+              <div className="user-avatar">{profile ? (profile.name || 'T').split(' ').map(n => n[0]).join('').slice(0,2).toUpperCase() : 'T'}</div>
+            )}
             <div className="user-details">
-              <h3>Teacher Dashboard</h3>
-              <p>Computer Networks Dept.</p>
+              <h3>{profile?.name || 'Teacher'}</h3>
+              <p>{profile?.role ? profile.role.charAt(0).toUpperCase() + profile.role.slice(1) : 'Teacher'}</p>
             </div>
           </div>
         </div>
@@ -62,11 +77,7 @@ const TeacherDashboard = ({ user, onLogout }) => {
             <span className="nav-icon">📊</span>
             Overview
           </a>
-          <a href="#quizzes" className={`nav-item ${activeTab === 'quizzes' ? 'active' : ''}`} onClick={() => setActiveTab('quizzes')}>
-            <span className="nav-icon">📝</span>
-            My QCMs
-          </a>
-          <a href="#create" className={`nav-item ${activeTab === 'create' ? 'active' : ''}`} onClick={() => setActiveTab('create')}>
+          <a href="#create" className={`nav-item ${activeTab === 'create' ? 'active' : ''}`} onClick={(e) => { e.preventDefault(); navigate('/qcms/teacher'); }}>
             <span className="nav-icon">➕</span>
             Create QCM
           </a>
@@ -74,7 +85,7 @@ const TeacherDashboard = ({ user, onLogout }) => {
             <span className="nav-icon">📚</span>
             Question Bank
           </a>
-          <a href="#results" className={`nav-item ${activeTab === 'results' ? 'active' : ''}`} onClick={() => setActiveTab('results')}>
+          <a href="#results" className={`nav-item ${activeTab === 'results' ? 'active' : ''}`} onClick={(e) => { e.preventDefault(); navigate('/qcms/teacher'); }}>
             <span className="nav-icon">🎯</span>
             Student Results
           </a>
@@ -128,7 +139,7 @@ const TeacherDashboard = ({ user, onLogout }) => {
               <div className="card">
                 <div className="card-header">
                   <h3 className="card-title">Recent QCMs</h3>
-                  <a href="#quizzes" className="btn btn-outline btn-sm">View All</a>
+                  <button className="btn btn-outline btn-sm" onClick={() => navigate('/qcms/teacher')}>View All</button>
                 </div>
                 <table className="table">
                   <thead>
@@ -164,13 +175,13 @@ const TeacherDashboard = ({ user, onLogout }) => {
                   <h3 className="card-title">Quick Actions</h3>
                 </div>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-                  <button className="btn btn-primary btn-icon" onClick={() => setActiveTab('create')}>
+                  <button className="btn btn-primary btn-icon" onClick={() => navigate('/qcms/teacher')}>
                     <span>➕</span> Create New QCM
                   </button>
                   <button className="btn btn-outline btn-icon" onClick={() => setActiveTab('questions')}>
                     <span>📚</span> Manage Question Bank
                   </button>
-                  <button className="btn btn-outline btn-icon" onClick={() => setActiveTab('results')}>
+                  <button className="btn btn-outline btn-icon" onClick={() => navigate('/qcms/teacher')}>
                     <span>🎯</span> View Student Results
                   </button>
                 </div>

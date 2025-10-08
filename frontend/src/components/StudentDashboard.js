@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 
 const StudentDashboard = ({ user, onLogout }) => {
@@ -6,6 +6,16 @@ const StudentDashboard = ({ user, onLogout }) => {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
   const navigate = useNavigate();
+  const [profile, setProfile] = useState(null);
+  const token = localStorage.getItem('qcm_user_token');
+
+  useEffect(() => {
+    if (!token) return;
+    fetch('/api/profile', { headers: { Authorization: token ? `Bearer ${token}` : '' } })
+      .then(r => r.json())
+      .then(d => setProfile(d?.data || null))
+      .catch(() => setProfile(null));
+  }, [token]);
 
   const handleLogout = () => {
     try { localStorage.removeItem('qcm_user_token'); } catch (e) {}
@@ -49,11 +59,15 @@ const StudentDashboard = ({ user, onLogout }) => {
       <div className={`sidebar ${mobileMenuOpen ? 'mobile-open' : ''}`}>
         <div className="sidebar-header">
           <a href="/" className="sidebar-logo">QCM-Net</a>
-          <div className="user-info">
-            <div className="user-avatar">SD</div>
+          <div className="user-info" onClick={() => navigate('/profile')} style={{ cursor: 'pointer' }}>
+            {profile?.avatar ? (
+              <img src={profile.avatar} alt="avatar" className="user-avatar" />
+            ) : (
+              <div className="user-avatar">{profile ? (profile.name || 'S').split(' ').map(n => n[0]).join('').slice(0,2).toUpperCase() : 'S'}</div>
+            )}
             <div className="user-details">
-              <h3>Student Dashboard</h3>
-              <p>Computer Science</p>
+              <h3>{profile?.name || 'Student'}</h3>
+              <p>{profile?.role ? profile.role.charAt(0).toUpperCase() + profile.role.slice(1) : 'Student'}</p>
             </div>
           </div>
         </div>
@@ -121,7 +135,7 @@ const StudentDashboard = ({ user, onLogout }) => {
               <div className="card">
                 <div className="card-header">
                   <h3 className="card-title">Available QCMs</h3>
-                  <a href="#quizzes" className="btn btn-outline btn-sm">View All</a>
+                  <button className="btn btn-outline btn-sm" onClick={() => navigate('/qcms/student')}>View All</button>
                 </div>
                 <div className="quiz-grid">
                   {availableQuizzes.map(quiz => (
@@ -142,8 +156,8 @@ const StudentDashboard = ({ user, onLogout }) => {
                       <div className="quiz-body">
                         <p><strong>Due:</strong> {quiz.dueDate}</p>
                         <div className="quiz-actions">
-                          <button className="btn btn-primary btn-sm">Start Quiz</button>
-                          <button className="btn btn-outline btn-sm">View Details</button>
+                          <button className="btn btn-primary btn-sm" onClick={() => navigate('/qcms/student')}>Start Quiz</button>
+                          <button className="btn btn-outline btn-sm" onClick={() => navigate('/qcms/student')}>View Details</button>
                         </div>
                       </div>
                     </div>
@@ -213,8 +227,8 @@ const StudentDashboard = ({ user, onLogout }) => {
                       <p><strong>Due Date:</strong> {quiz.dueDate}</p>
                       <p><strong>Instructions:</strong> Complete all questions within the time limit.</p>
                       <div className="quiz-actions">
-                        <button className="btn btn-primary">Start Quiz</button>
-                        <button className="btn btn-outline">View Details</button>
+                        <button className="btn btn-primary" onClick={() => navigate('/qcms/student')}>Start Quiz</button>
+                        <button className="btn btn-outline" onClick={() => navigate('/qcms/student')}>View Details</button>
                       </div>
                     </div>
                   </div>
