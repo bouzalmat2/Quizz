@@ -22,6 +22,15 @@ Route::get('/qcms/{id}', [QcmController::class, 'show']);
 Route::put('/qcms/{id}', [QcmController::class, 'update']);
 Route::delete('/qcms/{id}', [QcmController::class, 'destroy']);
 Route::post('/qcms/{id}/questions', [QcmController::class, 'addQuestion']);
+// Bank question routes (teacher question bank)
+use App\Http\Controllers\Api\BankQuestionController;
+Route::get('/bank/questions', [BankQuestionController::class, 'index']);
+Route::post('/bank/questions', [BankQuestionController::class, 'store']);
+Route::get('/bank/questions/{id}', [BankQuestionController::class, 'show']);
+Route::put('/bank/questions/{id}', [BankQuestionController::class, 'update']);
+Route::delete('/bank/questions/{id}', [BankQuestionController::class, 'destroy']);
+// attach bank question to a QCM
+Route::post('/bank/questions/{bankId}/attach/{qcmId}', [BankQuestionController::class, 'attachToQcm']);
 Route::post('/qcms/{id}/submit', [QcmController::class, 'submit']);
 Route::get('/results/student/{id}', [QcmController::class, 'studentResults']);
 Route::get('/results/qcm/{id}', [QcmController::class, 'qcmResults']);

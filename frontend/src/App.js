@@ -7,6 +7,7 @@ import DashboardStudent from './components/StudentDashboard';
 import TeacherQcms from './pages/TeacherQcms';
 import StudentQcms from './pages/StudentQcms';
 import Profile from './pages/Profile';
+import QuestionBank from './pages/QuestionBank';
 
 function App() {
   return (
@@ -18,6 +19,7 @@ function App() {
   <Route path="/dashboard/student" element={<DashboardStudent />} />
   <Route path="/qcms/teacher" element={<TeacherQcms />} />
   <Route path="/qcms/student" element={<StudentQcms />} />
+  <Route path="/bank/questions" element={<QuestionBank />} />
   <Route path="/profile" element={<Profile />} />
       </Routes>
     </BrowserRouter>

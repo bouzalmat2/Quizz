@@ -81,7 +81,7 @@ const TeacherDashboard = ({ user, onLogout }) => {
             <span className="nav-icon">➕</span>
             Create QCM
           </a>
-          <a href="#questions" className={`nav-item ${activeTab === 'questions' ? 'active' : ''}`} onClick={() => setActiveTab('questions')}>
+          <a href="#questions" className={`nav-item ${activeTab === 'questions' ? 'active' : ''}`} onClick={(e) => { e.preventDefault(); navigate('/bank/questions'); }}>
             <span className="nav-icon">📚</span>
             Question Bank
           </a>
@@ -178,7 +178,7 @@ const TeacherDashboard = ({ user, onLogout }) => {
                   <button className="btn btn-primary btn-icon" onClick={() => navigate('/qcms/teacher')}>
                     <span>➕</span> Create New QCM
                   </button>
-                  <button className="btn btn-outline btn-icon" onClick={() => setActiveTab('questions')}>
+                  <button className="btn btn-outline btn-icon" onClick={() => navigate('/bank/questions')}>
                     <span>📚</span> Manage Question Bank
                   </button>
                   <button className="btn btn-outline btn-icon" onClick={() => navigate('/qcms/teacher')}>
