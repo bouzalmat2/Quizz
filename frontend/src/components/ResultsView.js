@@ -62,15 +62,15 @@ export default function ResultsView({ result, onClose, showComparison = false })
           <div className="results-stats">
             <div className="stat-item">
               <div className="stat-number correct">{stats.correct}</div>
-              <div className="stat-label">Correct</div>
+              <div className="stat-label AAA">Correct</div>
             </div>
             <div className="stat-item">
               <div className="stat-number incorrect">{stats.incorrect}</div>
-              <div className="stat-label">Incorrect</div>
+              <div className="stat-label AAA">Incorrect</div>
             </div>
             <div className="stat-item">
               <div className="stat-number total">{stats.total}</div>
-              <div className="stat-label">Total Questions</div>
+              <div className="stat-label AAA">Total Questions</div>
             </div>
           </div>
         </div>

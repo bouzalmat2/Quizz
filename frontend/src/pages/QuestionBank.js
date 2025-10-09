@@ -1,4 +1,6 @@
 import React, { useEffect, useState } from 'react';
+import ConfirmModal from '../components/ConfirmModal';
+import Toast from '../components/Toast';
 
 export default function QuestionBank() {
   const [questions, setQuestions] = useState([]);
@@ -18,6 +20,9 @@ export default function QuestionBank() {
   
   const token = localStorage.getItem('qcm_user_token');
   const [qcms, setQcms] = useState([]);
+  const [attachSelection, setAttachSelection] = useState({});
+  const [toast, setToast] = useState({ message: '', type: 'info' });
+  const [confirm, setConfirm] = useState({ open: false, id: null, onConfirm: null });
   const [expandedQcms, setExpandedQcms] = useState([]);
   const [expandedQuestions, setExpandedQuestions] = useState([]);
   const [activeTab, setActiveTab] = useState('bank');
@@ -32,7 +37,7 @@ export default function QuestionBank() {
     fetch('/api/bank/questions', { headers: { Authorization: token ? `Bearer ${token}` : '' } })
       .then(r => r.json())
       .then(d => setQuestions(d || []))
-      .catch(console.error)
+      .catch(err => setToast({ message: 'Failed to load questions', type: 'error' }))
       .finally(() => setLoading(false));
   }
 
@@ -75,7 +80,7 @@ export default function QuestionBank() {
       .then(async r => {
         const json = await r.json().catch(() => ({}));
         if (!r.ok) { 
-          alert('Error: ' + (json.error || JSON.stringify(json))); 
+          setToast({ message: 'Error: ' + (json.error || JSON.stringify(json)), type: 'error' }); 
           return; 
         }
         if (editing) {
@@ -101,21 +106,34 @@ export default function QuestionBank() {
     setEditing(null);
   }
 
+  // remove a bank question. Deletion is allowed even if attached to a QCM — show a stronger confirmation warning.
   function remove(id) {
-    if (!window.confirm('Are you sure you want to delete this question from your bank?')) return;
-    
-    fetch(`/api/bank/questions/${id}`, { 
-      method: 'DELETE', 
-      headers: { Authorization: token ? `Bearer ${token}` : '' } 
-    })
-      .then(r => r.ok ? setQuestions(prev => prev.filter(q => q.id !== id)) : r.json().then(j => alert('Delete failed: ' + (j.error || JSON.stringify(j)))))
-      .catch(console.error);
+    // show confirmation modal
+    setConfirm({ open: true, id, onConfirm: () => {
+      setConfirm({ open: false, id: null, onConfirm: null });
+      fetch(`/api/bank/questions/${id}`, { 
+        method: 'DELETE', 
+        headers: { Authorization: token ? `Bearer ${token}` : '' } 
+      })
+        .then(async r => {
+          const json = await r.json().catch(() => ({}));
+          if (r.ok) {
+            // remove from local lists
+            setQuestions(prev => prev.filter(q => q.id !== id));
+            // also refresh QCMs in case it was attached
+            loadQcms();
+            setToast({ message: (json.message || 'Question deleted'), type: 'info' });
+          } else {
+            setToast({ message: 'Delete failed: ' + (json.error || JSON.stringify(json)), type: 'error' });
+          }
+        })
+        .catch(() => setToast({ message: 'Delete failed', type: 'error' }));
+    }});
   }
 
   function attach(bankId) {
-    const qcmId = window.prompt('Enter the QCM ID to attach this question to:');
-    if (!qcmId) return;
-    
+  const qcmId = attachSelection[bankId];
+  if (!qcmId) { setToast({ message: 'Please select a QCM to attach to.', type: 'error' }); return; }
     fetch(`/api/bank/questions/${bankId}/attach/${qcmId}`, { 
       method: 'POST', 
       headers: { Authorization: token ? `Bearer ${token}` : '' } 
@@ -123,10 +141,13 @@ export default function QuestionBank() {
       .then(async r => {
         const json = await r.json().catch(() => ({}));
         if (!r.ok) { 
-          alert('Attach failed: ' + (json.error || JSON.stringify(json))); 
+          setToast({ message: 'Attach failed: ' + (json.error || JSON.stringify(json)), type: 'error' }); 
           return; 
         }
-        alert('Question successfully attached to QCM!');
+        setToast({ message: 'Question successfully attached to QCM!', type: 'info' });
+        // refresh qcms and bank list to reflect the moved question
+        loadQcms();
+        loadQuestions();
       })
       .catch(console.error);
   }
@@ -165,6 +186,7 @@ export default function QuestionBank() {
   const subjects = [...new Set(questions.map(q => q.subject).filter(Boolean))];
 
   return (
+    <>
     <div className="question-bank-container">
       <div className="card">
         <div className="card-header">
@@ -328,7 +350,7 @@ export default function QuestionBank() {
                 </form>
               </div>
 
-              {/* Question List */}
+              {/* Question List grouped by QCM */}
               <div className="list-section">
                 <div className="section-header">
                   <h3>Your Question Bank ({filteredQuestions.length})</h3>
@@ -363,70 +385,174 @@ export default function QuestionBank() {
                   </div>
                 </div>
 
-                <div className="questions-grid">
+                <div className="questions-grid grouped">
                   {loading ? (
                     <div className="loading">Loading questions...</div>
-                  ) : filteredQuestions.length === 0 ? (
-                    <div className="empty-state">
-                      {searchTerm || filterDifficulty !== 'all' || filterSubject !== 'all' ? 
-                        'No questions match your filters.' : 
-                        'No questions in your bank yet. Add your first question!'}
-                    </div>
                   ) : (
-                    filteredQuestions.map(q => (
-                      <div key={q.id} className="question-card">
-                        <div className="question-header">
-                          <h4 className="question-text">{q.text}</h4>
-                          <div className="question-meta">
-                            <span className={`badge difficulty-${q.difficulty}`}>
-                              {q.difficulty}
-                            </span>
-                            <span className="badge badge-outline">{q.subject}</span>
-                          </div>
+                    <>
+                        {/* Unassigned bank questions (qcm_id == null) */}
+                        <div className="qcm-group unassigned">
+                        <div className="group-header"><h4>Unassigned Questions</h4></div>
+                        <div className="group-questions">
+                          {filteredQuestions.filter(q => !q.qcm_id).map(q => (
+                            <div key={q.id} className="question-card">
+                              <div className="question-header">
+                                <h4 className="question-text">{q.text}</h4>
+                                <div className="question-meta">
+                                  <span className={`badge difficulty-${q.difficulty}`}>{q.difficulty}</span>
+                                  <span className="badge badge-outline">{q.subject}</span>
+                                </div>
+                              </div>
+                              <div className="question-options">
+                                <strong>Options:</strong>
+                                <div className="options-preview">
+                                  {q.options.map((opt, i) => (
+                                    <span key={i} className={`option-preview ${opt === q.correct_answer ? 'correct' : ''}`}>{opt}</span>
+                                  ))}
+                                </div>
+                              </div>
+                              <div className="question-actions">
+                                <button className="btn btn-outline btn-sm" onClick={() => loadToForm(q)}>Edit</button>
+                                <button className="btn btn-outline btn-sm" onClick={() => remove(q.id)}>Delete</button>
+                                <select
+                                  value={attachSelection[q.id] || ''}
+                                  onChange={e => setAttachSelection(s => ({ ...s, [q.id]: e.target.value }))}
+                                  className="form-select"
+                                  style={{ marginRight: 8 }}
+                                >
+                                  <option value="">Select QCM...</option>
+                                  {qcms.map(c => (
+                                    <option key={c.id} value={c.id}>{c.title}</option>
+                                  ))}
+                                </select>
+                                <button className="btn btn-primary btn-sm" onClick={() => attach(q.id)}>Attach</button>
+                              </div>
+                            </div>
+                          ))}
                         </div>
-                        
-                        <div className="question-options">
-                          <strong>Options:</strong>
-                          <div className="options-preview">
-                            {q.options.map((opt, i) => (
-                              <span 
-                                key={i} 
-                                className={`option-preview ${opt === q.correct_answer ? 'correct' : ''}`}
-                              >
-                                {opt}
-                              </span>
+                      </div>
+
+                      {/* QCM groups: for each QCM, show its questions */}
+                      {qcms.map(qcm => (
+                        <div key={`group-${qcm.id}`} className="qcm-group">
+                          <div className="group-header">
+                            <h4>{qcm.title} <span className="group-meta">({(qcm.questions||[]).length})</span></h4>
+                          </div>
+                          <div className="group-questions">
+                            {(qcm.questions || []).filter(q => {
+                              // apply same filters/search to these questions
+                              const matchesSearch = q.text.toLowerCase().includes(searchTerm.toLowerCase()) || (q.explanation && q.explanation.toLowerCase().includes(searchTerm.toLowerCase()));
+                              const matchesDifficulty = filterDifficulty === 'all' || q.difficulty === filterDifficulty;
+                              const matchesSubject = filterSubject === 'all' || q.subject === filterSubject;
+                              return matchesSearch && matchesDifficulty && matchesSubject;
+                            }).map(q => (
+                              <div key={q.id} className="question-card">
+                                <div className="question-header">
+                                  <h4 className="question-text">{q.text}</h4>
+                                  <div className="question-meta">
+                                    <span className={`badge difficulty-${q.difficulty}`}>{q.difficulty}</span>
+                                    <span className="badge badge-outline">{q.subject}</span>
+                                  </div>
+                                </div>
+                                <div className="question-options">
+                                  <strong>Options:</strong>
+                                  <div className="options-preview">
+                                    {q.options.map((opt, i) => (
+                                      <span key={i} className={`option-preview ${opt === q.correct_answer ? 'correct' : ''}`}>{opt}</span>
+                                    ))}
+                                  </div>
+                                </div>
+                                <div className="question-actions">
+                                  <button className="btn btn-outline btn-sm" onClick={() => loadToForm(q)}>Edit</button>
+                                  <button className="btn btn-outline btn-sm" onClick={() => remove(q.id, !!q.qcm_id)}>Delete</button>
+                                  <button className="btn btn-outline btn-sm" onClick={() => {
+                                    // unassign this question from its QCM
+                                    if (!q.qcm_id) { setToast({ message: 'Question is not assigned to a QCM', type: 'error' }); return; }
+                                    fetch(`/api/bank/questions/${q.id}/unassign`, { method: 'POST', headers: { Authorization: token ? `Bearer ${token}` : '' } })
+                                      .then(async r => {
+                                        const json = await r.json().catch(() => ({}));
+                                        if (!r.ok) { setToast({ message: 'Unassign failed: ' + (json.error || JSON.stringify(json)), type: 'error' }); return; }
+                                        setToast({ message: 'Question unassigned successfully', type: 'info' });
+                                        loadQcms();
+                                        loadQuestions();
+                                      })
+                                      .catch(() => setToast({ message: 'Unassign failed', type: 'error' }));
+                                  }}>Unassign</button>
+                                  {/* allow moving this question to another QCM */}
+                                  <select
+                                    value={attachSelection[q.id] || ''}
+                                    onChange={e => setAttachSelection(s => ({ ...s, [q.id]: e.target.value }))}
+                                    className="form-select"
+                                    style={{ marginRight: 8, marginLeft: 8 }}
+                                  >
+                                    <option value="">Move to QCM...</option>
+                                    {qcms.filter(c => c.id !== q.qcm_id).map(c => (
+                                      <option key={c.id} value={c.id}>{c.title}</option>
+                                    ))}
+                                  </select>
+                                  <button className="btn btn-primary btn-sm" onClick={() => {
+                                    const dest = attachSelection[q.id];
+                                    if (!dest) { setToast({ message: 'Select a destination QCM first', type: 'error' }); return; }
+                                    // use attach to move question between QCMs
+                                    fetch(`/api/bank/questions/${q.id}/attach/${dest}`, { method: 'POST', headers: { Authorization: token ? `Bearer ${token}` : '' } })
+                                      .then(async r => {
+                                        const json = await r.json().catch(() => ({}));
+                                        if (!r.ok) { setToast({ message: 'Move failed: ' + (json.error || JSON.stringify(json)), type: 'error' }); return; }
+                                        setToast({ message: 'Question moved successfully', type: 'info' });
+                                        loadQcms();
+                                        loadQuestions();
+                                      })
+                                      .catch(() => setToast({ message: 'Move failed', type: 'error' }));
+                                  }}>Move</button>
+                                </div>
+                              </div>
                             ))}
                           </div>
                         </div>
+                      ))}
 
-                        {q.explanation && (
-                          <div className="question-explanation">
-                            <strong>Explanation:</strong> {q.explanation}
-                          </div>
-                        )}
-
-                        <div className="question-actions">
-                          <button 
-                            className="btn btn-outline btn-sm"
-                            onClick={() => loadToForm(q)}
-                          >
-                            Edit
-                          </button>
-                          <button 
-                            className="btn btn-outline btn-sm"
-                            onClick={() => remove(q.id)}
-                          >
-                            Delete
-                          </button>
-                          <button 
-                            className="btn btn-primary btn-sm"
-                            onClick={() => attach(q.id)}
-                          >
-                            Attach to QCM
-                          </button>
+                      {/* Unassigned bank questions (qcm_id == null) */}
+                      <div className="qcm-group unassigned">
+                        <div className="group-header"><h4>Unassigned Questions</h4></div>
+                        <div className="group-questions">
+                          {filteredQuestions.filter(q => !q.qcm_id).map(q => (
+                            <div key={q.id} className="question-card">
+                              <div className="question-header">
+                                <h4 className="question-text">{q.text}</h4>
+                                <div className="question-meta">
+                                  <span className={`badge difficulty-${q.difficulty}`}>{q.difficulty}</span>
+                                  <span className="badge badge-outline">{q.subject}</span>
+                                </div>
+                              </div>
+                              <div className="question-options">
+                                <strong>Options:</strong>
+                                <div className="options-preview">
+                                  {q.options.map((opt, i) => (
+                                    <span key={i} className={`option-preview ${opt === q.correct_answer ? 'correct' : ''}`}>{opt}</span>
+                                  ))}
+                                </div>
+                              </div>
+                              <div className="question-actions">
+                                <button className="btn btn-outline btn-sm" onClick={() => loadToForm(q)}>Edit</button>
+                                <button className="btn btn-outline btn-sm" onClick={() => remove(q.id, !!q.qcm_id)}>Delete</button>
+                                <select
+                                  value={attachSelection[q.id] || ''}
+                                  onChange={e => setAttachSelection(s => ({ ...s, [q.id]: e.target.value }))}
+                                  className="form-select"
+                                  style={{ marginRight: 8 }}
+                                >
+                                  <option value="">Select QCM...</option>
+                                  {qcms.map(c => (
+                                    <option key={c.id} value={c.id}>{c.title}</option>
+                                  ))}
+                                </select>
+                                <button className="btn btn-primary btn-sm" onClick={() => attach(q.id)}>Attach</button>
+                              </div>
+                            </div>
+                          ))}
                         </div>
                       </div>
-                    ))
+                    </>
                   )}
                 </div>
               </div>
@@ -447,7 +573,7 @@ export default function QuestionBank() {
                     <div className="qcm-info">
                       <h4 className="qcm-title">{qcm.title}</h4>
                       <div className="qcm-meta">
-                        <span className="qcm-subject">{qcm.subject}</span>
+                        <span className="qcm-subject">{(qcm.subject && qcm.subject.name) ? qcm.subject.name : (qcm.subject || '')}</span>
                         <span className={`status ${qcm.published ? 'published' : 'draft'}`}>
                           {qcm.published ? 'Published' : 'Draft'}
                         </span>
@@ -532,5 +658,14 @@ export default function QuestionBank() {
         )}
       </div>
     </div>
+    <ConfirmModal 
+      open={confirm.open}
+      title="Delete Question"
+      message="Are you sure you want to delete this question from your bank?"
+      onConfirm={confirm.onConfirm}
+      onCancel={() => setConfirm({ open: false, id: null, onConfirm: null })}
+    />
+    <Toast message={toast.message} type={toast.type} onClose={() => setToast({ message: '', type: 'info' })} />
+    </>
   );
 }

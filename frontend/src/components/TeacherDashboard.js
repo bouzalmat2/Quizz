@@ -1,14 +1,20 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
+import ConfirmModal from './ConfirmModal';
 
 const TeacherDashboard = ({ user, onLogout }) => {
   const [activeTab, setActiveTab] = useState('overview');
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
   const navigate = useNavigate();
-
   const [profile, setProfile] = useState(null);
   const token = localStorage.getItem('qcm_user_token');
+  const [confirmLogout, setConfirmLogout] = useState(false);
+
+  // Dynamic states
+  const [qcms, setQcms] = useState([]);
+  const [results, setResults] = useState([]); // aggregated attempts across qcms
+  const [loading, setLoading] = useState(false);
 
   useEffect(() => {
     if (!token) return;
@@ -16,34 +22,75 @@ const TeacherDashboard = ({ user, onLogout }) => {
       .then(r => r.json())
       .then(d => setProfile(d?.data || null))
       .catch(() => setProfile(null));
+    // load qcms and their results
+    loadQcmsAndResults();
   }, [token]);
 
+  function loadQcmsAndResults() {
+    if (!token) return;
+    setLoading(true);
+    fetch('/api/qcms', { headers: { Authorization: token ? `Bearer ${token}` : '' } })
+      .then(r => r.json())
+      .then(async data => {
+        const list = data?.data || data || [];
+        setQcms(list);
+
+        // For each qcm, use embedded results if present, otherwise fetch
+        const promises = list.map(q => {
+          if (Array.isArray(q.results)) return Promise.resolve(q.results.map(rr => ({ ...rr, qcm: q })));
+          return fetch(`/api/results/qcm/${q.id}`, { headers: { Authorization: token ? `Bearer ${token}` : '' } })
+            .then(r2 => r2.json())
+            .then(d2 => (d2?.data || d2 || []).map(rr => ({ ...rr, qcm: q })))
+            .catch(() => []);
+        });
+
+        const arrs = await Promise.all(promises);
+        const all = arrs.flat();
+        setResults(all);
+      })
+      .catch(console.error)
+      .finally(() => setLoading(false));
+  }
+
   const handleLogout = () => {
+    setConfirmLogout(true);
+  };
+
+  const doLogout = () => {
     try { localStorage.removeItem('qcm_user_token'); } catch (e) {}
     try { localStorage.removeItem('qcm_user_role'); } catch (e) {}
     if (typeof onLogout === 'function') onLogout();
     navigate('/');
   };
 
-  // Sample data
+  // computed stats from fetched qcms/results
+  const totalQcms = qcms.length;
+  const activeQcms = qcms.filter(q => q.published).length;
+  const uniqueStudents = new Set(results.map(r => r.student_id)).size;
+  const overallAvg = results.length ? Math.round((results.reduce((s, r) => s + (r.score || 0), 0) / results.length)) : 0;
+
   const stats = {
-    totalQuizzes: 12,
-    activeQuizzes: 3,
-    totalStudents: 45,
-    avgScore: 78
+    totalQuizzes: totalQcms,
+    activeQuizzes: activeQcms,
+    totalStudents: uniqueStudents,
+    avgScore: overallAvg
   };
 
-  const recentQuizzes = [
-    { id: 1, title: 'TCP/IP Protocols', subject: 'Networking', students: 45, avgScore: 82, status: 'active' },
-    { id: 2, title: 'Network Security', subject: 'Security', students: 42, avgScore: 75, status: 'completed' },
-    { id: 3, title: 'Routing Algorithms', subject: 'Networking', students: 38, avgScore: 68, status: 'completed' }
-  ];
+  // recent published/created qcms
+  const recentQuizzes = [...qcms]
+    .sort((a, b) => (new Date(b.created_at || b.updated_at || 0)) - (new Date(a.created_at || a.updated_at || 0)))
+    .slice(0, 5)
+    .map(q => ({ id: q.id, title: q.title, subject: q.subject || '—', students: (q.results || results.filter(r => r.qcm?.id === q.id)).length, avgScore: (() => {
+      const arr = (q.results || results.filter(r => r.qcm?.id === q.id));
+      if (!arr.length) return 0;
+      const avg = arr.reduce((s, r) => s + (r.score || 0), 0) / arr.length;
+      return Math.round(avg);
+    })(), status: q.published ? 'active' : 'draft' }));
 
-  const studentResults = [
-    { id: 1, name: 'John Doe', quiz: 'TCP/IP Protocols', score: 85, total: 100, time: '45m' },
-    { id: 2, name: 'Jane Smith', quiz: 'TCP/IP Protocols', score: 92, total: 100, time: '38m' },
-    { id: 3, name: 'Mike Johnson', quiz: 'Network Security', score: 78, total: 100, time: '52m' }
-  ];
+  const studentResults = [...results]
+    .sort((a, b) => new Date(b.created_at || 0) - new Date(a.created_at || 0))
+    .slice(0, 8)
+    .map(r => ({ id: r.id, name: r.student?.name || r.student_name || `#${r.student_id}`, quiz: r.qcm?.title || `QCM ${r.qcm_id}`, score: Math.round(r.score || 0), total: 100, time: r.duration ? `${Math.round(r.duration/60)}m` : '-' }));
 
   return (
     <div className="dashboard">
@@ -58,7 +105,7 @@ const TeacherDashboard = ({ user, onLogout }) => {
       {/* Sidebar */}
       <div className={`sidebar ${mobileMenuOpen ? 'mobile-open' : ''}`}>
         <div className="sidebar-header">
-          <a href="/" className="sidebar-logo">QCM-Net</a>
+          <div className="sidebar-logo" role="banner">QCM-Net</div>
           <div className="user-info" onClick={() => navigate('/profile')} style={{ cursor: 'pointer' }}>
             {profile?.avatar ? (
               <img src={profile.avatar} alt="avatar" className="user-avatar" />
@@ -139,14 +186,14 @@ const TeacherDashboard = ({ user, onLogout }) => {
               <div className="card">
                 <div className="card-header">
                   <h3 className="card-title">Recent QCMs</h3>
-                  <button className="btn btn-outline btn-sm" onClick={() => navigate('/qcms/teacher')}>View All</button>
+                  <button className="btn btn-outline btn-sm QQQ" onClick={() => navigate('/qcms/teacher', { state: { tab: 'qcms' } })}>View All</button>
                 </div>
                 <table className="table">
                   <thead>
                     <tr>
                       <th>Title</th>
                       <th>Subject</th>
-                      <th>Students</th>
+                      <th>Submissions</th>
                       <th>Avg Score</th>
                       <th>Status</th>
                     </tr>
@@ -175,13 +222,13 @@ const TeacherDashboard = ({ user, onLogout }) => {
                   <h3 className="card-title">Quick Actions</h3>
                 </div>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-                  <button className="btn btn-primary btn-icon" onClick={() => navigate('/qcms/teacher')}>
+                  <button className="btn btn-primary btn-icon" onClick={() => navigate('/qcms/teacher', { state: { tab: 'create' } })}>
                     <span>➕</span> Create New QCM
                   </button>
                   <button className="btn btn-outline btn-icon" onClick={() => navigate('/bank/questions')}>
                     <span>📚</span> Manage Question Bank
                   </button>
-                  <button className="btn btn-outline btn-icon" onClick={() => navigate('/qcms/teacher')}>
+                  <button className="btn btn-outline btn-icon" onClick={() => navigate('/qcms/teacher', { state: { tab: 'results' } })}>
                     <span>🎯</span> View Student Results
                   </button>
                 </div>
@@ -253,7 +300,7 @@ const TeacherDashboard = ({ user, onLogout }) => {
                       </td>
                       <td>{result.time}</td>
                       <td>
-                        <button className="btn btn-outline btn-sm">View Details</button>
+                        <button className="btn btn-outline btn-sm" onClick={() => navigate(`/qcms/teacher`)}>View Details</button>
                       </td>
                     </tr>
                   ))}
@@ -263,6 +310,13 @@ const TeacherDashboard = ({ user, onLogout }) => {
           </div>
         )}
       </div>
+      <ConfirmModal 
+        open={confirmLogout}
+        title="Logout"
+        message="Are you sure you want to log out?"
+        onConfirm={() => { setConfirmLogout(false); doLogout(); }}
+        onCancel={() => setConfirmLogout(false)}
+      />
     </div>
   );
 };

@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import '../App.css';
+import Toast from '../components/Toast';
 
 export default function Auth() {
   const [isRegister, setIsRegister] = useState(false);
@@ -11,6 +12,7 @@ export default function Auth() {
   const [userRole, setUserRole] = useState('student');
   const [isLoading, setIsLoading] = useState(false);
   const navigate = useNavigate();
+  const [toast, setToast] = useState({ message: '', type: 'info' });
 
   function handleSubmit(e) {
     e.preventDefault();
@@ -19,12 +21,12 @@ export default function Auth() {
     // Basic validation
     if (isRegister) {
       if (password !== confirmPassword) {
-        alert('Passwords do not match!');
+        setToast({ message: 'Passwords do not match!', type: 'error' });
         setIsLoading(false);
         return;
       }
       if (password.length < 6) {
-        alert('Password must be at least 6 characters long!');
+        setToast({ message: 'Password must be at least 6 characters long!', type: 'error' });
         setIsLoading(false);
         return;
       }
@@ -69,7 +71,7 @@ export default function Auth() {
       })
       .catch(err => {
         setIsLoading(false);
-        alert(err.message || 'Authentication failed');
+        setToast({ message: err.message || 'Authentication failed', type: 'error' });
       });
   }
 
@@ -205,6 +207,7 @@ export default function Auth() {
           </button>
         </div>
       </div>
+        <Toast message={toast.message} type={toast.type} onClose={() => setToast({ message: '', type: 'info' })} />
     </div>
   );
 }

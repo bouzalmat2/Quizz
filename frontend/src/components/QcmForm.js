@@ -18,12 +18,51 @@ export default function QcmForm({ initial = {}, onSubmit, onCancel, mode = 'crea
   });
 
   const [tagInput, setTagInput] = useState('');
+  const [subjects, setSubjects] = useState([]);
+
+  // helper: convert server datetime (ISO or SQL) to datetime-local input value
+  const toLocalInput = (val) => {
+    if (!val) return '';
+    const d = new Date(val);
+    if (isNaN(d.getTime())) return '';
+    const pad = n => n.toString().padStart(2, '0');
+    const yyyy = d.getFullYear();
+    const mm = pad(d.getMonth() + 1);
+    const dd = pad(d.getDate());
+    const hh = pad(d.getHours());
+    const min = pad(d.getMinutes());
+    return `${yyyy}-${mm}-${dd}T${hh}:${min}`;
+  };
 
   useEffect(() => {
-    if (initial.title) {
-      setFormData(prev => ({ ...prev, ...initial }));
+    if (initial && Object.keys(initial).length) {
+      // normalize server keys to the form's state shape
+      setFormData(prev => ({
+        ...prev,
+        title: initial.title || prev.title,
+        subject: initial.subject || prev.subject,
+        description: initial.description || prev.description,
+        published: typeof initial.published === 'boolean' ? initial.published : prev.published,
+        duration: initial.duration ?? prev.duration,
+        difficulty: initial.difficulty || prev.difficulty,
+        maxAttempts: initial.max_attempts ?? initial.maxAttempts ?? prev.maxAttempts,
+        startDate: initial.start_at ? toLocalInput(initial.start_at) : (initial.startDate || prev.startDate),
+        endDate: initial.end_at ? toLocalInput(initial.end_at) : (initial.endDate || prev.endDate),
+        shuffleQuestions: initial.shuffle_questions ?? initial.shuffleQuestions ?? prev.shuffleQuestions,
+        showResults: initial.show_results || initial.showResults || prev.showResults,
+        passingScore: initial.passing_score ?? initial.passingScore ?? prev.passingScore,
+        tags: initial.tags || prev.tags || []
+      }));
     }
   }, [initial]);
+
+  useEffect(() => {
+    // fetch subjects for the dropdown
+    fetch('/api/subjects')
+      .then(r => r.json())
+      .then(d => setSubjects(d?.data || d || []))
+      .catch(() => setSubjects([]));
+  }, []);
 
   const handleChange = (field, value) => {
     setFormData(prev => ({ ...prev, [field]: value }));
@@ -48,7 +87,24 @@ export default function QcmForm({ initial = {}, onSubmit, onCancel, mode = 'crea
 
   const submit = (e) => {
     e.preventDefault();
-    onSubmit(formData);
+    // map formData to backend-friendly payload keys
+    const payload = {
+      title: formData.title,
+      subject: formData.subject,
+      description: formData.description,
+      published: !!formData.published,
+      duration: formData.duration ? Number(formData.duration) : null,
+      difficulty: formData.difficulty,
+      max_attempts: formData.maxAttempts ? Number(formData.maxAttempts) : null,
+      start_at: formData.startDate ? new Date(formData.startDate).toISOString() : null,
+      end_at: formData.endDate ? new Date(formData.endDate).toISOString() : null,
+      passing_score: formData.passingScore ? Number(formData.passingScore) : null,
+      shuffle_questions: !!formData.shuffleQuestions,
+      show_results: formData.showResults,
+      tags: formData.tags
+    };
+
+    onSubmit(payload);
     
     if (mode === 'create') {
       setFormData({
@@ -56,11 +112,11 @@ export default function QcmForm({ initial = {}, onSubmit, onCancel, mode = 'crea
         subject: '',
         description: '',
         published: false,
-        duration: 60,
-        difficulty: 'medium',
-        maxAttempts: 1,
-        startDate: '',
-        endDate: '',
+  duration: 60,
+  difficulty: 'medium',
+  maxAttempts: 1,
+  startDate: '',
+  endDate: '',
         shuffleQuestions: false,
         showResults: 'after_submission',
         passingScore: 60,
@@ -109,9 +165,9 @@ export default function QcmForm({ initial = {}, onSubmit, onCancel, mode = 'crea
                   onChange={e => handleChange('subject', e.target.value)}
                 >
                   <option value="">Select a subject</option>
-                  <option value="Computer Networks">Computer Networks</option>
-                  <option value="Network Security">Network Security</option>
-                  <option value="TCP/IP Protocols">TCP/IP Protocols</option>
+                  {subjects.map(s => (
+                    <option key={s.id} value={s.name}>{s.name}</option>
+                  ))}
                 </select>
               </div>
             </div>

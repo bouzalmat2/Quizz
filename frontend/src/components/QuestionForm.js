@@ -1,6 +1,8 @@
 import React, { useState } from 'react';
+import Toast from './Toast';
 
 export default function QuestionForm({ onSubmit, onCancel, initialQuestion = null }) {
+  const [toast, setToast] = useState({ message: '', type: 'info' });
   const [text, setText] = useState(initialQuestion?.text || '');
   const [options, setOptions] = useState(initialQuestion?.options || ['', '', '', '']);
   const [correctIndex, setCorrectIndex] = useState(initialQuestion?.correct_answer || 0);
@@ -14,12 +16,12 @@ export default function QuestionForm({ onSubmit, onCancel, initialQuestion = nul
     // Validation
     const filledOptions = options.filter(opt => opt.trim() !== '');
     if (filledOptions.length < 2) {
-      alert('Please provide at least 2 options');
+      setToast({ message: 'Please provide at least 2 options', type: 'error' });
       return;
     }
 
     if (!options[correctIndex]?.trim()) {
-      alert('Correct option cannot be empty');
+      setToast({ message: 'Correct option cannot be empty', type: 'error' });
       return;
     }
 
@@ -249,6 +251,7 @@ export default function QuestionForm({ onSubmit, onCancel, initialQuestion = nul
           </div>
         </form>
       </div>
+      <Toast message={toast.message} type={toast.type} onClose={() => setToast({ message: '', type: 'info' })} />
     </div>
   );
 }

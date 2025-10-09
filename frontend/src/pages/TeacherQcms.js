@@ -1,7 +1,10 @@
 import React, { useEffect, useState } from 'react';
+import { useLocation } from 'react-router-dom';
 import QcmForm from '../components/QcmForm';
 import QuestionForm from '../components/QuestionForm';
 import ResultsView from '../components/ResultsView';
+import ConfirmModal from '../components/ConfirmModal';
+import Toast from '../components/Toast';
 
 export default function TeacherQcms() {
   const [qcms, setQcms] = useState([]);
@@ -12,13 +15,23 @@ export default function TeacherQcms() {
   const [activeTab, setActiveTab] = useState('qcms');
   const [isLoading, setIsLoading] = useState(false);
   const [message, setMessage] = useState({ type: '', text: '' });
+  const [toast, setToast] = useState({ message: '', type: 'info' });
+  const [confirm, setConfirm] = useState({ open: false, id: null, onConfirm: null });
   const [stats, setStats] = useState({ total: 0, published: 0, draft: 0, avgScore: 0 });
 
   const token = localStorage.getItem('qcm_user_token');
+  const location = useLocation();
 
   useEffect(() => {
     fetchQcms();
   }, [token]);
+
+  // react to navigation state to set the active tab (e.g., navigate('/qcms/teacher', { state: { tab: 'create' } }))
+  useEffect(() => {
+    if (location && location.state && location.state.tab) {
+      setActiveTab(location.state.tab);
+    }
+  }, [location]);
 
   useEffect(() => {
     calculateStats();
@@ -39,23 +52,28 @@ export default function TeacherQcms() {
     const total = qcms.length;
     const published = qcms.filter(q => q.published).length;
     const draft = total - published;
-    
-    // Calculate average score across all results
-    let totalScore = 0;
-    let scoreCount = 0;
-    
-    qcms.forEach(qcm => {
-      if (qcm.results) {
-        qcm.results.forEach(result => {
-          totalScore += result.score || 0;
-          scoreCount++;
-        });
-      }
+
+    // Collect results for every qcm: use embedded qcm.results when available, otherwise fetch
+    const promises = qcms.map(qcm => {
+      if (Array.isArray(qcm.results)) return Promise.resolve(qcm.results);
+      return fetch(`/api/results/qcm/${qcm.id}`, { headers: { Authorization: token ? `Bearer ${token}` : '' } })
+        .then(r => r.json())
+        .then(d => d?.data || d || [])
+        .catch(() => []);
     });
-    
-    const avgScore = scoreCount > 0 ? Math.round(totalScore / scoreCount) : 0;
-    
-    setStats({ total, published, draft, avgScore });
+
+    Promise.all(promises)
+      .then(arrs => {
+        const allResults = arrs.flat();
+        const totalScore = allResults.reduce((s, res) => s + (res.score || 0), 0);
+        const scoreCount = allResults.length;
+        const avgScore = scoreCount > 0 ? Math.round(totalScore / scoreCount) : 0;
+        setStats({ total, published, draft, avgScore });
+      })
+      .catch(err => {
+        console.error('Failed to load results for stats', err);
+        setStats({ total, published, draft, avgScore: 0 });
+      });
   }
 
   function createQcm(payload) {
@@ -112,22 +130,21 @@ export default function TeacherQcms() {
   }
 
   function deleteQcm(id) {
-    if (!window.confirm('Are you sure you want to delete this QCM? This action cannot be undone.')) {
-      return;
-    }
-
-    fetch(`/api/qcms/${id}`, {
-      method: 'DELETE',
-      headers: { Authorization: token ? `Bearer ${token}` : '' },
-    })
-      .then(async r => {
-        if (!r.ok) throw new Error('Delete failed');
-        setQcms(prev => prev.filter(q => q.id !== id));
-        showMessage('success', 'QCM deleted successfully!');
+    setConfirm({ open: true, id, onConfirm: () => {
+      setConfirm({ open: false, id: null, onConfirm: null });
+      fetch(`/api/qcms/${id}`, {
+        method: 'DELETE',
+        headers: { Authorization: token ? `Bearer ${token}` : '' },
       })
-      .catch(err => {
-        showMessage('error', 'Failed to delete QCM');
-      });
+        .then(async r => {
+          if (!r.ok) throw new Error('Delete failed');
+          setQcms(prev => prev.filter(q => q.id !== id));
+          showMessage('success', 'QCM deleted successfully!');
+        })
+        .catch(err => {
+          showMessage('error', 'Failed to delete QCM');
+        });
+    }});
   }
 
   function addQuestion(qcmId, question) {
@@ -165,7 +182,44 @@ export default function TeacherQcms() {
     })
       .then(r => r.json())
       .then(data => {
-        const list = data?.data || data || [];
+        const list = (data?.data || data || []).map(item => ({ ...item, qcm: qcms.find(q => q.id === qcmId) || null }));
+        setResults(list);
+        setSelectedResult(null);
+        setActiveTab('results');
+      })
+      .catch(console.error)
+      .finally(() => setIsLoading(false));
+  }
+
+  // Load all results across the teacher's QCMs (aggregate qcm.results when available)
+  function loadAllResults() {
+    // If qcms already include results from the API, aggregate them
+    const aggregated = qcms.reduce((acc, q) => {
+      if (Array.isArray(q.results) && q.results.length) {
+        q.results.forEach(r => acc.push({ ...r, qcm: q }));
+      }
+      return acc;
+    }, []);
+
+    if (aggregated.length) {
+      setResults(aggregated);
+      setSelectedResult(null);
+      setActiveTab('results');
+      return;
+    }
+
+    // Fallback: fetch results per QCM sequentially and aggregate
+    setIsLoading(true);
+    const promises = qcms.map(q =>
+      fetch(`/api/results/qcm/${q.id}`, { headers: { Authorization: token ? `Bearer ${token}` : '' } })
+        .then(r => r.json())
+        .then(d => (d?.data || d || []).map(item => ({ ...item, qcm: q })))
+        .catch(() => [])
+    );
+
+    Promise.all(promises)
+      .then(arrs => {
+        const list = arrs.flat();
         setResults(list);
         setSelectedResult(null);
         setActiveTab('results');
@@ -175,7 +229,9 @@ export default function TeacherQcms() {
   }
 
   function showMessage(type, text) {
+    // keep backward-compatible message state for existing UI, but also show toast
     setMessage({ type, text });
+    setToast({ message: text, type: type === 'error' ? 'error' : 'info' });
     setTimeout(() => setMessage({ type: '', text: '' }), 5000);
   }
 
@@ -188,6 +244,7 @@ export default function TeacherQcms() {
   }
 
   return (
+    <>
     <div className="teacher-qcms-container">
       <div className="card">
         <div className="card-header">
@@ -231,7 +288,7 @@ export default function TeacherQcms() {
           </button>
           <button
             className={`tab-button ${activeTab === 'results' ? 'active' : ''}`}
-            onClick={() => setActiveTab('results')}
+            onClick={() => loadAllResults()}
           >
             📊 Results
           </button>
@@ -282,7 +339,7 @@ export default function TeacherQcms() {
                     <div className="qcm-header">
                       <div className="qcm-title-section">
                         <h3 className="qcm-title">{qcm.title}</h3>
-                        <span className="qcm-subject">{qcm.subject}</span>
+                        <span className="qcm-subject">{(qcm.subject && qcm.subject.name) ? qcm.subject.name : (qcm.subject || '')}</span>
                       </div>
                       <div className="qcm-status">
                         <span className={`status-badge ${qcm.published ? 'published' : 'draft'}`}>
@@ -387,34 +444,51 @@ export default function TeacherQcms() {
                 </div>
                 
                 <div className="results-list">
-                  {results.map(result => (
-                    <div key={result.id} className="result-item">
-                      <div className="result-info">
-                        <div className="student-name">
-                          {result.student?.name || `Student ${result.student_id}`}
+                  {(() => {
+                    // group results by qcm id (use result.qcm?.id or result.qcm_id)
+                    const groups = results.reduce((acc, r) => {
+                      const qid = (r.qcm && r.qcm.id) || r.qcm_id || r.qcmId || 'unknown';
+                      if (!acc[qid]) acc[qid] = [];
+                      acc[qid].push(r);
+                      return acc;
+                    }, {});
+
+                    return Object.entries(groups).map(([qid, items]) => {
+                      const qcm = items[0].qcm || qcms.find(q => q.id === parseInt(qid, 10)) || { title: 'Unknown QCM' };
+                      return (
+                        <div key={qid} className="results-group">
+                          <div className="results-group-header">
+                            <h4>{qcm.title}</h4>
+                            <div className="results-group-meta">{items.length} submission{items.length > 1 ? 's' : ''}</div>
+                          </div>
+                          <div className="results-group-items">
+                            {items.map(result => (
+                              <div key={result.id} className="result-item">
+                                <div className="result-info">
+                                  <div className="student-name">
+                                    {result.student?.name || `Student ${result.student_id}`}
+                                  </div>
+                                  <div className="result-meta">
+                                    <span className="score">Score: {result.score}%</span>
+                                    <span className="date">{new Date(result.created_at).toLocaleString()}</span>
+                                    {result.duration && (
+                                      <span className="duration">Time: {Math.floor(result.duration / 60)}m {result.duration % 60}s</span>
+                                    )}
+                                  </div>
+                                </div>
+                                <button
+                                  className="btn btn-outline btn-sm"
+                                  onClick={() => setSelectedResult(selectedResult?.id === result.id ? null : result)}
+                                >
+                                  {selectedResult?.id === result.id ? 'Hide Details' : 'View Details'}
+                                </button>
+                              </div>
+                            ))}
+                          </div>
                         </div>
-                        <div className="result-meta">
-                          <span className="score">Score: {result.score}%</span>
-                          <span className="date">
-                            {new Date(result.created_at).toLocaleString()}
-                          </span>
-                          {result.duration && (
-                            <span className="duration">
-                              Time: {Math.floor(result.duration / 60)}m {result.duration % 60}s
-                            </span>
-                          )}
-                        </div>
-                      </div>
-                      <button
-                        className="btn btn-outline btn-sm"
-                        onClick={() => setSelectedResult(
-                          selectedResult?.id === result.id ? null : result
-                        )}
-                      >
-                        {selectedResult?.id === result.id ? 'Hide Details' : 'View Details'}
-                      </button>
-                    </div>
-                  ))}
+                      );
+                    });
+                  })()}
                 </div>
 
                 {/* Detailed Result View */}
@@ -432,5 +506,14 @@ export default function TeacherQcms() {
         )}
       </div>
     </div>
+    <ConfirmModal 
+      open={confirm.open}
+      title="Delete QCM"
+      message="Are you sure you want to delete this QCM? This action cannot be undone."
+      onConfirm={confirm.onConfirm}
+      onCancel={() => setConfirm({ open: false, id: null, onConfirm: null })}
+    />
+    <Toast message={toast.message} type={toast.type} onClose={() => setToast({ message: '', type: 'info' })} />
+    </>
   );
 }

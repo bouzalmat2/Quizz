@@ -131,10 +131,10 @@ const LandingPage = () => {
               <a href="/signup?role=teacher" className="btn btn-primary">
                 Start Creating QCMs
               </a>
-              <a href="/signup?role=student" className="btn btn-outline">
+              <a href="/signup?role=student" className="btn btn-outline WWW">
                 Join as Student
               </a>
-              <a href="#features" className="btn btn-outline">
+              <a href="#features" className="btn btn-outline WWW">
                 Learn More
               </a>
             </div>

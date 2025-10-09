@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import Toast from '../components/Toast';
 
 export default function Profile() {
   const [user, setUser] = useState(null);
@@ -12,6 +13,7 @@ export default function Profile() {
   const [activeTab, setActiveTab] = useState('profile');
   const [isLoading, setIsLoading] = useState(false);
   const [message, setMessage] = useState({ type: '', text: '' });
+  const [toast, setToast] = useState({ message: '', type: 'info' });
 
   const token = localStorage.getItem('qcm_user_token');
   const navigate = useNavigate();
@@ -166,6 +168,7 @@ export default function Profile() {
 
   function showMessage(type, text) {
     setMessage({ type, text });
+    setToast({ message: text, type: type === 'error' ? 'error' : 'info' });
     setTimeout(() => setMessage({ type: '', text: '' }), 5000);
   }
 
@@ -192,6 +195,7 @@ export default function Profile() {
   }
 
   return (
+    <>
     <div className="profile-container">
       <div className="card">
         <div className="card-header">
@@ -219,7 +223,7 @@ export default function Profile() {
         {message.text && (
           <div className={`alert alert-${message.type}`}>
             <span>{message.text}</span>
-            <button onClick={() => setMessage({ type: '', text: '' })}>×</button>
+            <button onClick={() => setMessage({ type: '', text: '' })}></button>
           </div>
         )}
 
@@ -433,5 +437,7 @@ export default function Profile() {
         )}
       </div>
     </div>
+    <Toast message={toast.message} type={toast.type} onClose={() => setToast({ message: '', type: 'info' })} />
+    </>
   );
 }

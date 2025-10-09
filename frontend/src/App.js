@@ -8,6 +8,7 @@ import TeacherQcms from './pages/TeacherQcms';
 import StudentQcms from './pages/StudentQcms';
 import Profile from './pages/Profile';
 import QuestionBank from './pages/QuestionBank';
+import MyResults from './pages/MyResults';
 
 function App() {
   return (
@@ -21,6 +22,7 @@ function App() {
   <Route path="/qcms/student" element={<StudentQcms />} />
   <Route path="/bank/questions" element={<QuestionBank />} />
   <Route path="/profile" element={<Profile />} />
+  <Route path="/my-results" element={<MyResults />} />
       </Routes>
     </BrowserRouter>
   );
