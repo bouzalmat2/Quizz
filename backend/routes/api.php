@@ -31,6 +31,12 @@ Route::put('/bank/questions/{id}', [BankQuestionController::class, 'update']);
 Route::delete('/bank/questions/{id}', [BankQuestionController::class, 'destroy']);
 // attach bank question to a QCM
 Route::post('/bank/questions/{bankId}/attach/{qcmId}', [BankQuestionController::class, 'attachToQcm']);
+// unassign a question from its QCM (set qcm_id = NULL)
+Route::post('/bank/questions/{bankId}/unassign', [BankQuestionController::class, 'unassignFromQcm']);
 Route::post('/qcms/{id}/submit', [QcmController::class, 'submit']);
 Route::get('/results/student/{id}', [QcmController::class, 'studentResults']);
 Route::get('/results/qcm/{id}', [QcmController::class, 'qcmResults']);
+
+// Subjects
+use App\Http\Controllers\Api\SubjectController;
+Route::get('/subjects', [SubjectController::class, 'index']);

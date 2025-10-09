@@ -88,26 +88,30 @@ export default function StudentQcms() {
       .catch(console.error);
   }
 
-  // Filter available QCMs
+  // Filter available QCMs — use backend fields `start_at` / `end_at` when present
   const filteredQcms = qcms.filter(qcm => {
-    const matchesSearch = qcm.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                         ((qcm.subject && qcm.subject.name ? qcm.subject.name : qcm.subject || '').toLowerCase().includes(searchTerm.toLowerCase())) ||
-                         (qcm.description && qcm.description.toLowerCase().includes(searchTerm.toLowerCase()));
-    
+    const subjectText = qcm.subject && typeof qcm.subject === 'object' ? (qcm.subject.name || '') : (qcm.subject || '');
+    const matchesSearch = (qcm.title || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
+                         subjectText.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                         (qcm.description || '').toLowerCase().includes(searchTerm.toLowerCase());
+
     const now = new Date();
-    const startDate = qcm.start_date ? new Date(qcm.start_date) : null;
-    const endDate = qcm.end_date ? new Date(qcm.end_date) : null;
+    // prefer start_at/end_at (ISO timestamps from backend). fall back to start_date/end_date for legacy entries
+    const startRaw = qcm.start_at ?? qcm.start_date ?? null;
+    const endRaw = qcm.end_at ?? qcm.end_date ?? null;
+    const startDate = startRaw ? new Date(startRaw) : null;
+    const endDate = endRaw ? new Date(endRaw) : null;
 
     if (filter === 'available') {
       const isAvailable = (!startDate || startDate <= now) && (!endDate || endDate >= now);
       return matchesSearch && isAvailable;
     }
-    
+
     if (filter === 'upcoming') {
       const isUpcoming = startDate && startDate > now;
       return matchesSearch && isUpcoming;
     }
-    
+
     if (filter === 'expired') {
       const isExpired = endDate && endDate < now;
       return matchesSearch && isExpired;
@@ -127,8 +131,10 @@ export default function StudentQcms() {
 
   const getQcmStatus = (qcm) => {
     const now = new Date();
-    const startDate = qcm.start_date ? new Date(qcm.start_date) : null;
-    const endDate = qcm.end_date ? new Date(qcm.end_date) : null;
+    const startRaw = qcm.start_at ?? qcm.start_date ?? null;
+    const endRaw = qcm.end_at ?? qcm.end_date ?? null;
+    const startDate = startRaw ? new Date(startRaw) : null;
+    const endDate = endRaw ? new Date(endRaw) : null;
 
     if (startDate && startDate > now) return 'upcoming';
     if (endDate && endDate < now) return 'expired';
@@ -270,10 +276,10 @@ export default function StudentQcms() {
                         )}
                       </div>
 
-                      {qcm.start_date && (
+                      {(qcm.start_at || qcm.start_date) && (
                         <div className="date-info">
-                          <strong>Available:</strong> {new Date(qcm.start_date).toLocaleDateString()}
-                          {qcm.end_date && ` - ${new Date(qcm.end_date).toLocaleDateString()}`}
+                          <strong>Available:</strong> {new Date(qcm.start_at ?? qcm.start_date).toLocaleDateString()}
+                          {(qcm.end_at || qcm.end_date) && ` - ${new Date(qcm.end_at ?? qcm.end_date).toLocaleDateString()}`}
                         </div>
                       )}
                     </div>

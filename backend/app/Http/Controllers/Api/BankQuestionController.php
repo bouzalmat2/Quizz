@@ -4,9 +4,9 @@ namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
 use Illuminate\Http\Request;
-use App\Models\BankQuestion;
 use App\Models\Qcm;
 use App\Models\Question;
+use Illuminate\Support\Facades\Schema;
 use App\Models\User;
 use Illuminate\Support\Facades\Log;
 
@@ -24,7 +24,7 @@ class BankQuestionController extends Controller
     {
         $user = $this->userFromRequest($request);
         if (!$user || $user->role !== 'teacher') return response()->json(['error' => 'Forbidden'], 403);
-        return BankQuestion::where('teacher_id', $user->id)->get();
+        return Question::whereNull('qcm_id')->where('teacher_id', $user->id)->get();
     }
 
     public function store(Request $request)
@@ -42,23 +42,30 @@ class BankQuestionController extends Controller
         ]);
 
         $data['teacher_id'] = $user->id;
-        $bq = BankQuestion::create($data);
-        return response()->json($bq, 201);
+        // create a question row that acts as a bank item (qcm_id = NULL)
+        $data['teacher_id'] = $user->id;
+        $data['qcm_id'] = null;
+        $q = Question::create($data);
+        return response()->json($q, 201);
     }
 
     public function show(Request $request, $id)
     {
         $user = $this->userFromRequest($request);
-        $bq = BankQuestion::findOrFail($id);
-        if (!$user || $user->id !== $bq->teacher_id) return response()->json(['error' => 'Forbidden'], 403);
-        return $bq;
+        $q = Question::findOrFail($id);
+
+        if (!$user || $q->teacher_id !== $user->id) {
+            return response()->json(['message' => 'Not authorized'], 403);
+        }
+
+        return response()->json($q, 200);
     }
 
     public function update(Request $request, $id)
     {
         $user = $this->userFromRequest($request);
-        $bq = BankQuestion::findOrFail($id);
-        if (!$user || $user->id !== $bq->teacher_id) return response()->json(['error' => 'Forbidden'], 403);
+        $q = Question::findOrFail($id);
+        if (!$user || $q->teacher_id !== $user->id) return response()->json(['message' => 'Not authorized'], 403);
 
         $data = $request->validate([
             'text' => 'nullable|string',
@@ -69,17 +76,24 @@ class BankQuestionController extends Controller
             'image_url' => 'nullable|url',
         ]);
 
-        $bq->update($data);
-        return $bq;
+        $q->update($data);
+        return response()->json($q, 200);
     }
 
     public function destroy(Request $request, $id)
     {
         $user = $this->userFromRequest($request);
-        $bq = BankQuestion::findOrFail($id);
-        if (!$user || $user->id !== $bq->teacher_id) return response()->json(['error' => 'Forbidden'], 403);
-        $bq->delete();
-        return response()->json(['success' => true]);
+        $q = Question::findOrFail($id);
+        if (!$user || $q->teacher_id !== $user->id) return response()->json(['message' => 'Not authorized'], 403);
+
+        $attachedTo = $q->qcm_id;
+        $q->delete();
+
+        if ($attachedTo !== null) {
+            return response()->json(['message' => 'Question deleted from QCM and bank'], 200);
+        }
+
+        return response()->json(['message' => 'Question deleted'], 200);
     }
 
     // copy a bank question into a given QCM as a real question
@@ -88,18 +102,34 @@ class BankQuestionController extends Controller
         $user = $this->userFromRequest($request);
         if (!$user || $user->role !== 'teacher') return response()->json(['error' => 'Forbidden'], 403);
 
-        $bq = BankQuestion::findOrFail($bankQuestionId);
+        // Attach by updating the existing bank question's qcm_id so it's moved into the QCM
+        $bq = Question::findOrFail($bankQuestionId);
+        // allow attaching even if already attached (it will move). If you want to prevent re-attaching, check is_null(qcm_id)
         $qcm = Qcm::findOrFail($qcmId);
         if ($qcm->teacher_id !== $user->id) return response()->json(['error' => 'Forbidden'], 403);
+        if ($bq->teacher_id !== $user->id) return response()->json(['error' => 'Forbidden'], 403);
 
-        $question = Question::create([
-            'qcm_id' => $qcm->id,
-            'text' => $bq->text,
-            'options' => $bq->options,
-            'correct_answer' => $bq->correct_answer,
-            'explanation' => $bq->explanation,
-        ]);
+        $bq->qcm_id = $qcm->id;
+        $bq->save();
 
-        return response()->json($question, 201);
+        return response()->json($bq, 200);
+    }
+
+    // Unassign a question from its QCM (set qcm_id = NULL)
+    public function unassignFromQcm(Request $request, $bankQuestionId)
+    {
+        $user = $this->userFromRequest($request);
+        if (!$user || $user->role !== 'teacher') return response()->json(['error' => 'Forbidden'], 403);
+
+        $bq = Question::findOrFail($bankQuestionId);
+        if ($bq->teacher_id !== $user->id) return response()->json(['error' => 'Forbidden'], 403);
+
+        // allow unassign only if currently attached
+        if (is_null($bq->qcm_id)) return response()->json(['error' => 'Question is not assigned to a QCM'], 400);
+
+        $bq->qcm_id = null;
+        $bq->save();
+
+        return response()->json($bq, 200);
     }
 }

@@ -1945,6 +1945,7 @@ button.nav-item.nav-button{
   padding: 0.25rem;
   border-radius: 4px;
   transition: all 0.3s;
+  margin-left: auto;
 }
 
 .btn-close:hover {

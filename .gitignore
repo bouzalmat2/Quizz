@@ -12,6 +12,16 @@ yarn-error.log*
 /frontend/dist/
 /frontend/.env.local
 
+# Frontend environment and caches
+/frontend/.env
+/frontend/.env.*
+/frontend/.env.*.local
+/frontend/node_modules/
+/frontend/coverage/
+/frontend/.parcel-cache/
+/frontend/.cache/
+
+
 # Laravel / PHP
 /backend/vendor/
 /backend/.env

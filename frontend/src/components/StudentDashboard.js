@@ -286,7 +286,7 @@ const StudentDashboard = ({ user, onLogout }) => {
                       return (a.title || '').localeCompare(b.title || '');
                     });
 
-                    const limited = sorted.slice(0, 4);
+                    const limited = sorted.slice(0, 6);
 
                     return limited.map(quiz => (
                       <div key={quiz.id} className="quiz-card">
@@ -313,7 +313,7 @@ const StudentDashboard = ({ user, onLogout }) => {
                     ));
                   })()}
                 </div>
-                {qcms.length > 4 && (
+                {qcms.length > 6 && (
                   <div style={{ textAlign: 'center', marginTop: '0.75rem' }}>
                     <button className="btn btn-link" onClick={() => navigate('/qcms/student')}>Show more</button>
                   </div>
